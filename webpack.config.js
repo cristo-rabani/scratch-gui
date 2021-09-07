@@ -6,7 +6,8 @@ var webpack = require('webpack');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var HtmlWebpackPlugin = require('html-webpack-plugin');
 var UglifyJsPlugin = require('uglifyjs-webpack-plugin');
-
+var VirtualModulePlugin = require('virtual-module-webpack-plugin');
+var glob = require('glob');
 // PostCss
 var autoprefixer = require('autoprefixer');
 var postcssVars = require('postcss-simple-vars');
@@ -184,7 +185,8 @@ module.exports = [
         defaultsDeep({}, base, {
             target: 'web',
             entry: {
-                'scratch-gui': './src/index.js'
+                // 'scratch-gui': './src/index.js',
+                'scratch-gui': './src/export.js'
             },
             output: {
                 libraryTarget: 'umd',
@@ -193,7 +195,13 @@ module.exports = [
             },
             externals: {
                 'react': 'react',
-                'react-dom': 'react-dom'
+                'react-dom': 'react-dom',
+                'react-redux': 'react-redux',
+                'redux': 'redux',
+                'react-virtualized': 'react-virtualized',
+                'prop-types': 'prop-types',
+                'react-contextmenu': 'react-contextmenu',
+                'react-draggable': 'react-draggable'
             },
             module: {
                 rules: base.module.rules.concat([
@@ -208,6 +216,28 @@ module.exports = [
                 ])
             },
             plugins: base.plugins.concat([
+                new VirtualModulePlugin({
+                    moduleName: './src/export.js',
+                    contents: `
+                        var a="CRISTO";
+                        module.exports = require("./index.js");
+
+                        var modules = {};
+                        ${(
+            [
+                ...glob.sync('./src/lib/**/*.js*'),
+                ...glob.sync('./src/components/**/*.js*'),
+                ...glob.sync('./src/containers/**/*.js*'),
+                ...glob.sync('./src/reducers/**/*.js*')
+            ]
+                .map(
+                    file => `modules['${file.replace('./src/', '')}'] = require("${file.replace('src/', '')}")`
+                )
+                .join('\n')
+        )}
+                        module.exports.modules = modules;
+                    `
+                }),
                 new CopyWebpackPlugin([{
                     from: 'node_modules/scratch-blocks/media',
                     to: 'static/blocks-media'
