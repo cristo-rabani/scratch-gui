@@ -96,6 +96,43 @@ if (!process.env.CI) {
     base.plugins.push(new webpack.ProgressPlugin());
 }
 
+const _set = (obj, pathArr, value) => {
+    if (Object(obj) !== obj) return obj; // When obj is not an object
+    // If not yet an array, get the keys from the string-path
+    if (!Array.isArray(pathArr)) pathArr = pathArr.toString().match(/[^.[\]]+/g) || [];
+    // eslint-disable-next-line no-return-assign
+    pathArr.slice(0, -1).reduce((a, c, i) => // Iterate all of them except the last one
+        Object(a[c]) === a[c] ? // Does the key exist and is its value an object?
+        // Yes: then follow that path
+            a[c] :
+        // No: create the key. Is the next key a potential array-index?
+            a[c] = Math.abs(pathArr[i + 1]) >> 0 === +pathArr[i + 1] ?
+                [] : // Yes: assign a new array object
+                {}, // No: assign a new plain object
+    obj)[pathArr[pathArr.length - 1]] = value; // Finally assign the value to the last key
+    return obj; // Return the top-level object to allow chaining
+};
+
+const modules2export = [
+    ...glob.sync('./src/lib/**/*.js*'),
+    ...glob.sync('./src/components/**/*.js*'),
+    ...glob.sync('./src/containers/**/*.js*'),
+    ...glob.sync('./src/reducers/**/*.js*'),
+    './src/index.js'
+].map(file => file.replace('./src/', ''));
+
+const modulesTree = {};
+
+modules2export.forEach(file => _set(
+    modulesTree,
+    file.split('/'),
+    `#FN#!function module(_, exports) {Object.assign(exports, require('./${file}'))}#FN#!`
+));
+
+const modulesTreeSTR = JSON.stringify({node_modules: {'scratch-gui': modulesTree}}, null, 2)
+    .replace(/"?#FN#!"?/g, '');
+
+
 module.exports = [
     // to run editor examples
     defaultsDeep({}, base, {
@@ -219,23 +256,22 @@ module.exports = [
                 new VirtualModulePlugin({
                     moduleName: './src/export.js',
                     contents: `
-                        var a="CRISTO";
-                        module.exports = require("./index.js");
+                        var meteorInstall = function noInstall() { return function noInstall () {} };
+                        if (typeof Package === 'object' && typeof Package.modules === 'object') {
+                            meteorInstall = Package.modules.meteorInstall;
+                        }
 
-                        var modules = {};
-                        ${(
-            [
-                ...glob.sync('./src/lib/**/*.js*'),
-                ...glob.sync('./src/components/**/*.js*'),
-                ...glob.sync('./src/containers/**/*.js*'),
-                ...glob.sync('./src/reducers/**/*.js*')
-            ]
-                .map(
-                    file => `modules['${file.replace('./src/', '')}'] = require("${file.replace('src/', '')}")`
-                )
-                .join('\n')
-        )}
-                        module.exports.modules = modules;
+
+                        var meteorRequire = meteorInstall(
+                        ${modulesTreeSTR}, {
+                              "extensions": [
+                                ".js",
+                                ".jsx"
+                              ]
+                        });
+                        module.exports = require("./index.js");
+                        module.exports._ = meteorRequire;
+                        //meteorRequire('/node_modules/scratch-gui/index.js');
                     `
                 }),
                 new CopyWebpackPlugin([{
