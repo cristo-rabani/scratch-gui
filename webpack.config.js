@@ -269,6 +269,7 @@ module.exports = [
                                 ".jsx"
                               ]
                         });
+                        
                         module.exports = require("./index.js");
                         module.exports._ = meteorRequire;
                         meteorRequire('/node_modules/scratch-gui/index.js');
